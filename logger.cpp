@@ -3,11 +3,16 @@
 std::ofstream logger::logStream;
 std::wofstream logger::logStreamW;
 bool logger::isOpen = false;
+bool logger::debugEnabled = false;
+std::mutex logger::logMutex;
+std::mutex logger::logMutexW;
 
 #pragma region CHAR
 //--------------------------------------------------------------------------------------------
-bool logger::init(const char* logFilename)
+bool logger::init(const char* logFilename, bool debug)
 {
+    logger::debugEnabled = debug;
+
     logger::logStream.open(logFilename, std::ofstream::out | std::ofstream::app);
     
     logger::isOpen = logger::logStream.fail() == false;
@@ -17,12 +22,14 @@ bool logger::init(const char* logFilename)
 // logs message without any header
 bool logger::log(const char* message, ...)
 {
-    char buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE], timeStr[22];
     short bufferLen;
     bool newLineRequired = false;
     
     if(message == NULL || logger::isOpen == false)
         return false;
+    
+    std::lock_guard<std::mutex> guard(logger::logMutex);
     
     va_list args;                                                           
     va_start(args, message);
@@ -35,7 +42,8 @@ bool logger::log(const char* message, ...)
     va_end(args);
 
     std::time_t t = std::time(nullptr);
-    logger::logStream << std::put_time(std::localtime(&t), "%F %T") << " " << buffer;
+    strftime(timeStr, sizeof(timeStr), "%F %T", std::localtime(&t));
+    logger::logStream << timeStr << " " << buffer;
 
     if(newLineRequired)
         logger::logStream << std::endl;
@@ -47,12 +55,14 @@ bool logger::log(const char* message, ...)
 // [DON'T USE] logs message with the given header. it's for internal use only
 bool logger::logWithHeader(const char *header, short headerLen, const char* message, va_list args)
 {
-    char buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE], timeStr[22];
     short bufferLen;
     bool newLineRequired = false;
 
     if(header == NULL || logger::isOpen == false)
         return false;
+
+    std::lock_guard<std::mutex> guard(logger::logMutex);
     
     strncpy(buffer, header, BUFFER_SIZE);
     vsnprintf(buffer + headerLen, BUFFER_SIZE - headerLen, message, args);
@@ -61,7 +71,8 @@ bool logger::logWithHeader(const char *header, short headerLen, const char* mess
         newLineRequired = true;
 
     std::time_t t = std::time(nullptr);
-    logger::logStream << std::put_time(std::localtime(&t), "%F %T") << buffer;
+    strftime(timeStr, sizeof(timeStr), "%F %T", std::localtime(&t));
+    logger::logStream << timeStr << " " << buffer;
     
     if(newLineRequired)
         logger::logStream << std::endl;
@@ -114,14 +125,31 @@ bool logger::success(const char* message, ...)
     
     return retVal;
 }
+//--------------------------------------------------------------------------------------------
+// logs message as debug
+bool logger::debug(const char* message, ...)
+{
+    if(message == NULL || logger::debugEnabled == false)
+        return false;
+
+    va_list args;
+    va_start(args, message);
+
+    bool retVal = logger::logWithHeader(HEADER_DEBUG, HEADER_LEN, message, args);
+    va_end(args);
+    
+    return retVal;
+}
 #pragma endregion CHAR
 
 #pragma region WCHAR_T
 //--------------------------------------------------------------------------------------------
-bool logger::init(const wchar_t* logFilename)
+bool logger::init(const wchar_t* logFilename, bool debug)
 {
     std::wstring ws(logFilename);
     std::string filename(ws.begin(), ws.end());
+
+    logger::debugEnabled = debug;
 
     logger::logStreamW.open(filename, std::ofstream::out | std::ofstream::app);
     
@@ -132,12 +160,15 @@ bool logger::init(const wchar_t* logFilename)
 // logs message without any header
 bool logger::log(const wchar_t* message, ...)
 {
-    wchar_t buffer[BUFFER_SIZE];
+    wchar_t buffer[BUFFER_SIZE], timeWStr[22];
+    char timeStr[22];
     short bufferLen;
     bool newLineRequired = false;
     
     if(message == NULL || logger::isOpen == false)
         return false;
+        
+    std::lock_guard<std::mutex> guard(logger::logMutexW);
     
     va_list args;                                                           
     va_start(args, message);
@@ -150,7 +181,9 @@ bool logger::log(const wchar_t* message, ...)
     va_end(args);
 
     std::time_t t = std::time(nullptr);
-    logger::logStreamW << std::put_time(std::localtime(&t), L"%F %T") << L" " << buffer;
+    strftime(timeStr, sizeof(timeStr), "%F %T", std::localtime(&t));
+    mbstowcs(timeWStr, timeStr, sizeof(timeWStr));
+    logger::logStreamW << timeWStr << L" " << buffer;
 
     if(newLineRequired)
         logger::logStreamW << std::endl;
@@ -162,12 +195,15 @@ bool logger::log(const wchar_t* message, ...)
 // [DON'T USE] logs message with the given header. it's for internal use only
 bool logger::logWithHeader(const wchar_t *header, short headerLen, const wchar_t* message, va_list args)
 {
-    wchar_t buffer[BUFFER_SIZE];
+    wchar_t buffer[BUFFER_SIZE], timeWStr[22];
+    char timeStr[22];
     short bufferLen;
     bool newLineRequired = false;
 
     if(header == NULL || logger::isOpen == false)
         return false;
+
+    std::lock_guard<std::mutex> guard(logger::logMutexW);
     
     wcsncpy(buffer, header, BUFFER_SIZE);
     vswprintf(buffer + headerLen, BUFFER_SIZE - headerLen, message, args);
@@ -176,7 +212,9 @@ bool logger::logWithHeader(const wchar_t *header, short headerLen, const wchar_t
         newLineRequired = true;
 
     std::time_t t = std::time(nullptr);
-    logger::logStreamW << std::put_time(std::localtime(&t), L"%F %T") << buffer;
+    strftime(timeStr, sizeof(timeStr), "%F %T", std::localtime(&t));
+    mbstowcs(timeWStr, timeStr, sizeof(timeWStr));
+    logger::logStreamW << timeWStr << buffer;
 
     if(newLineRequired)
         logger::logStreamW << std::endl;
@@ -229,6 +267,21 @@ bool logger::success(const wchar_t* message, ...)
     
     return retVal;
 }
+//--------------------------------------------------------------------------------------------
+// logs message as debug
+bool logger::debug(const wchar_t* message, ...)
+{
+    if(message == NULL || logger::debugEnabled == false)
+        return false;
+
+    va_list args;
+    va_start(args, message);
+
+    bool retVal = logger::logWithHeader(HEADER_DEBUGW, HEADER_LEN, message, args);
+    va_end(args);
+    
+    return retVal;
+}
 #pragma endregion WCHAR_T
 
 //--------------------------------------------------------------------------------------------
@@ -244,6 +297,11 @@ void logger::close()
         logger::logStreamW.flush();
         logger::logStreamW.close();
     }
+}
+//--------------------------------------------------------------------------------------------
+static void setDebug(bool debug)
+{
+    logger::debugEnabled = debug;
 }
 //--------------------------------------------------------------------------------------------
 /*std::string getCallerFileName()

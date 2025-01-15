@@ -3,7 +3,7 @@
 
 int main()
 {
-    logger::init("/home/ec2-user/logger.txt");
+    logger::init("/home/ec2-user/logger.txt", true);
     
     logger::error("ReadFile failed: %d", 5);
     logger::success("ReadFile was successful: %d", 1024);
