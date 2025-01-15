@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/favicon.ico" /> <a href="https://github.com/BloodhoundAllfather/logger">logger</a>
+</p>
+
 ## About
 This is a cross-platform static C++ logger class that you can use in your projects. Supports both `char` and `wchar_t`. It also supports multi-threaded logging.
 
