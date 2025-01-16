@@ -3,7 +3,7 @@
 </p>
 
 ## About
-This is a cross-platform static C++ logger class that you can use in your projects. Supports both `char` and `wchar_t`. It also supports multi-threaded logging.
+Logger is a light-weight and cross-platform static C++ class that you can use in your projects. Supports both `char` and `wchar_t`. It also supports multi-threaded logging.
 
 ## Usage
 Add `logger.cpp` and `logger.h` to your project. Then add `#include "logger.h"` into a source file and initialize it:
